@@ -1,0 +1,132 @@
+name: aws-assessment pipeline
+run-name: "${{ github.event.head_commit.message }}"
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - master
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+
+jobs:
+  security-scan-and-validation:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform init
+        run: terraform init
+      - name: Terraform validate
+        run: terraform validate
+      - name: Checkov GitHub Action
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          soft_fail: true
+  # Auth infrastructure (Cognito) in us-east-1
+  deploy-auth:
+    name: Amazon Cognito Auth (us-east-1)
+    needs: security-scan-and-validation
+    runs-on: ubuntu-latest
+    outputs:
+      user_pool_client_id: ${{ steps.auth_outputs.outputs.user_pool_client_id }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/root_modules/auth
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.0
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="key=auth.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="bucket=terraform-state-gkyrillos"
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -detailed-exitcode -out=tfplan
+        # continue-on-error: true
+      - name: Terraform apply
+        id: apply
+        if: steps.plan.outputs.exitcode == '2' && github.ref == 'refs/heads/master'
+        run: terraform apply -auto-approve tfplan
+      - name: Export outputs
+        if: (steps.apply.outputs.exitcode == '0' || steps.apply.outputs.exitcode == '2') && steps.apply.outcome == 'success'
+        id: auth_outputs
+        run: |
+          echo "user_pool_client_id=$(terraform output -raw user_pool_client_id)" >> "$GITHUB_OUTPUT"
+
+  # Deploy compute and data in both regions
+  deploy-compute-and-data:
+    name: Deploy compute and data
+    needs: deploy-auth
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        region: [us-east-1, eu-west-1]
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/root_modules/compute-and-data
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.0
+      - name: Terraform init
+        # use seperate tfstate for each region
+        run: |
+          terraform init \
+            -backend-config="key=compute-and-data-${{ matrix.region }}.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="bucket=terraform-state-gkyrillos"
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -detailed-exitcode -out=tfplan
+        # continue-on-error: true
+        env:
+          TF_VAR_region: ${{ matrix.region }}
+
+      - name: Terraform Apply
+        id: apply
+        if: steps.plan.outputs.exitcode == '2' && github.ref == 'refs/heads/master'
+        run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_region: ${{ matrix.region }}
+      - name: Terraform outputs
+        id: compute_outputs
+        if: (steps.apply.outputs.exitcode == '0' || steps.apply.outputs.exitcode == '2') && steps.apply.outcome == 'success'
+        run: |
+          echo "api_gateway_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
+      - name: Run validation script
+        working-directory: ${{ github.workspace }}/scripts
+        if: (steps.apply.outputs.exitcode == '0' || steps.apply.outputs.exitcode == '2') && steps.apply.outcome == 'success'
+        env:
+          USER_POOL_CLIENT_ID: ${{ needs.deploy-auth.outputs.user_pool_client_id }}
+          API_GATEWAY_URL: ${{ steps.compute_outputs.outputs.api_gateway_url }}
+        run: |
+          pip install boto3 requests
+          python validate_deployment.py
