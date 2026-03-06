@@ -32,7 +32,7 @@ locals {
         sns = {
           action = ["sns:Publish"],
           resources = [
-            "arn:aws:sns:us-east-1:566866004670:myTestTopic"
+            "arn:aws:sns:us-east-1:637226132752:Candidate-Verification-Topic"
           ]
         }
       },
@@ -52,7 +52,7 @@ locals {
         sns = {
           action = ["sns:Publish"],
           resources = [
-            "arn:aws:sns:us-east-1:566866004670:myTestTopic"
+            "arn:aws:sns:us-east-1:637226132752:Candidate-Verification-Topic"
           ]
         },
         run_task = {

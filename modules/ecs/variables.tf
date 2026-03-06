@@ -7,7 +7,7 @@ variable "region" {
 variable "sns_topic_arn" {
   type        = string
   description = "the sns topic arn"
-  default     = "arn:aws:sns:us-east-1:566866004670:myTestTopic"
+  default     = "arn:aws:sns:us-east-1:637226132752:Candidate-Verification-Topic"
 }
 
 variable "sns_topic_region" {
