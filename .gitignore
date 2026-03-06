@@ -1,0 +1,12 @@
+.terraform/
+*.tfplan
+tfplan
+*.tfstate
+*.tfstate.backup
+root_modules/auth/.terraform
+root_modules/compute-and-data/.terraform
+root_modules/compute-and-data/src/python/.venv/
+.DS_Store
+.venv/
+lambda_dispatch.py.zip
+lambda_greet.py.zip
