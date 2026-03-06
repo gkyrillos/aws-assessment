@@ -1319,4 +1319,4 @@ For each region, run the script:
 Change directory where the script is: cd scripts/
 Create a virtual environment: python -m venv .venv
 Install dependencies: pip install boto3 requests
-Run script: python validate_deployment.py --client-id <user_pool_client_id> --api-gw-url <api_url>
+Run script: python validate_deployment.py --client-id <user_pool_client_id> --api-gw-url <api_url> --aws-profile <your_aws_profile>
