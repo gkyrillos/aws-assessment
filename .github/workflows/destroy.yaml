@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  AWS_ROLE_ARN: arn:aws:iam::566866004670:role/GitHubActionsRole
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 jobs:
   destroy-compute-and-data:
