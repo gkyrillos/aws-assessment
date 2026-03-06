@@ -10,6 +10,7 @@ parser.add_argument('--client-id', dest='client_id', help='Cognito user pool cli
 parser.add_argument('--api-gw-url', dest='api_gw_url', help='Api-gateway URL', required=False)
 parser.add_argument('--username', dest='username', help='The username for authentication', required=False)
 parser.add_argument('--cognito-region', dest='cognito_region', help='The region Cognito is deployed into', required=False)
+parser.add_argument('--aws-profile', dest='aws_profile', help='The AWS profile', required=False)
 args = parser.parse_args()
 
 USERNAME = args.username or 'gkyrillos'
@@ -17,9 +18,10 @@ COGNITO_REGION = args.cognito_region or 'us-east-1'
 USER_POOL_CLIENT_ID = args.client_id or os.environ.get('USER_POOL_CLIENT_ID')
 API_GATEWAY_URL = args.api_gw_url or os.environ.get('API_GATEWAY_URL')
 PARAMETER_NAME = f"/cognito/{USERNAME}/password"
+AWS_PROFILE = args.aws_profile or 'gkyrillos'
 
 try:
-  session = boto3.Session(profile_name='gkyrillos')
+  session = boto3.Session(profile_name=AWS_PROFILE)
 except Exception:
   session = boto3.Session()
 
