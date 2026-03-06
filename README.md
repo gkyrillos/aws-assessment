@@ -1267,3 +1267,56 @@ terraform init -reconfigure \
   -backend-config="bucket=<your_bucket_name>" -var="region=eu-west-1"
 terraform destroy -var="region=eu-west-1"
 ```
+
+## Validation script
+
+There are 2 workflows in the repo.
+* one to create the infra, which consists of the following jobs:
+  * security-scan-and-validation (for checkov and terraform validate)
+  * deploy-auth (deploys the cognito auth), and
+  * deploy-compute-and-data (runs a matrix for deploying in both regions, eu-west-1 and us-east-1)
+* one to destroy the whole infra
+
+The validation script runs automatically when terraform apply succeeds on each region.
+A typical output would be:
+
+```
+ Trying to get the ssm password for gkyrillos
+Password for user gkyrillos retrieved successfully and it took 1188.8ms
+Getting the ID token for user gkyrillos
+Token for user gkyrillos retrieved successfully and it took 559.2ms
+Trying to hit route https://krrezd8p0j.execute-api.eu-west-1.amazonaws.com/prod/greet
+I hit https://krrezd8p0j.execute-api.eu-west-1.amazonaws.com/prod/greet successfully and it took 2147.1ms
+{"status": "OK", "region": "eu-west-1"}
+Trying to hit route https://krrezd8p0j.execute-api.eu-west-1.amazonaws.com/prod/dispatch
+I hit https://krrezd8p0j.execute-api.eu-west-1.amazonaws.com/prod/dispatch successfully and it took 2545.6ms
+{"message": "ECS Task Dispatched", "taskArn": "arn:aws:ecs:eu-west-1:566866004670:task/aws-assessment-eu-west-1/cf5855f9d4b7413d9ff3393f66ebde54"}
+Validation succeeded
+```
+
+It acquires a password for the user `gkyrillos`.
+It aqcuires a token.
+It hits both routes of the Api Gateway, greet and dispatch.
+It calculates how much time it took in each step.
+
+In order to run it manually, you need to get the following outputs from your terraform apply step:
+`user_pool_client_id`, which is the ClientID of the Cognito user pool, from the authentication root module, eg:
+
+```
+user_pool_client_id = "46kceq276j36dqcsejhoit7g0k"
+```
+and from the compute and data root module, one for each region, the Api-Gateway URL, eg:
+
+```
+For us-east-1: api_url = "https://hrpokuqcx9.execute-api.us-east-1.amazonaws.com/prod"
+and
+For eu-west-1: api_url = "https://krrezd8p0j.execute-api.eu-west-1.amazonaws.com/prod"
+```
+
+For each region, run the script:
+
+```
+Change directory where the script is: cd scripts/
+Create a virtual environment: python -m venv .venv
+Install dependencies: pip install boto3 requests
+Run script: python validate_deployment.py --client-id <user_pool_client_id> --api-gw-url <api_url>
